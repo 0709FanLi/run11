@@ -4,6 +4,7 @@
     <view class="map-section">
       <map
         id="runMap"
+        provider="qqmap"
         :latitude="latitude"
         :longitude="longitude"
         :markers="markers"
@@ -17,19 +18,9 @@
         :show-scale="false"
         :enable-zoom="true"
         :enable-rotate="true"
-        :min-scale="3"
-        :max-scale="20"
-        :custom-map-style="customMapStyle"
-        :setting="{
-          skew: 0,
-          rotate: 0,
-          showScale: false,
-          showCompass: true,
-          enableRotate: true,
-          enableOverlooking: false,
-          enableSatellite: false,
-          enableTraffic: false
-        }"
+        :include-points="includePoints"
+        @regionchange="onRegionChange"
+        @markertap="onMarkerTap"
       >
         <!-- 地图控件 -->
         <cover-view class="map-controls">
@@ -93,7 +84,11 @@ export default {
       locationChangeListener: null, // 位置监听器
       locationList: [], // 位置记录
       pace: '0\'00"', // 配速
-      customMapStyle: 'amap://styles/fresh' // 使用自定义地图样式
+      customMapStyle: 'amap://styles/fresh', // 使用自定义地图样式
+      includePoints: [],
+      positionUpdateTimer: null, // 保存位置更新定时器
+      lastKnownPosition: null, // 上次知道的位置
+      mapContext: null // 地图上下文
     }
   },
   computed: {
@@ -115,6 +110,24 @@ export default {
       return;
     }
     
+    // 尝试恢复上次保存的位置状态
+    const lastPositionData = uni.getStorageSync('lastPosition');
+    if (lastPositionData) {
+      this.lastKnownPosition = JSON.parse(lastPositionData);
+      this.latitude = this.lastKnownPosition.latitude;
+      this.longitude = this.lastKnownPosition.longitude;
+      
+      // 更新标记点位置
+      this.markers = [{
+        id: 1,
+        latitude: this.latitude,
+        longitude: this.longitude,
+        title: '当前位置',
+        iconPath: '/static/location.png',
+        width: 30,
+        height: 30
+      }];
+    }
     
     // 隐藏导航栏
     try {
@@ -126,20 +139,30 @@ export default {
     // 调整页面布局以适应底部安全区域
     this.adjustPageLayout();
     
-    // 延迟后尝试定位 - 解决某些设备上初始化问题
+    // 延迟后尝试定位
     setTimeout(() => {
       this.getLocationAndCenter();
     }, 200);
   },
   onShow() {
-    // 再次确保导航栏隐藏
+    // 确保导航栏隐藏
     setTimeout(() => {
       uni.hideNavigationBar();
     }, 300);
+    
+    // 开始非跑步状态下的位置更新
+    if (!this.isRunning) {
+      this.startPositionUpdateTimer();
+    }
+  },
+  onHide() {
+    // 停止位置更新定时器
+    this.clearPositionUpdateTimer();
   },
   onUnload() {
     // 清理监听器和计时器
     this.clearListeners();
+    this.clearPositionUpdateTimer();
   },
   methods: {
     adjustPageLayout() {
@@ -181,9 +204,7 @@ export default {
       
       uni.getLocation({
         type: 'gcj02',
-        altitude: true, // 获取高度信息增加精度
         isHighAccuracy: true, // 开启高精度定位
-        highAccuracyExpireTime: 4000, // 高精度定位超时时间 (ms)
         success: (res) => {
           clearTimeout(locationTimeout);
           
@@ -191,27 +212,33 @@ export default {
           this.latitude = res.latitude;
           this.longitude = res.longitude;
           
-          // 确保地图更新到当前位置
+          // 保存当前位置状态
+          this.lastKnownPosition = {
+            latitude: res.latitude,
+            longitude: res.longitude,
+            timestamp: Date.now()
+          };
+          uni.setStorageSync('lastPosition', JSON.stringify(this.lastKnownPosition));
+          
+          // 更新标记点位置
+          this.markers = [{
+            id: 1,
+            latitude: res.latitude,
+            longitude: res.longitude,
+            title: '当前位置',
+            iconPath: '/static/location.png',
+            width: 30,
+            height: 30
+          }];
+          
+          // 确保地图移动到当前位置
           setTimeout(() => {
-            // 更新标记点位置
-            this.markers = [{
-              id: 1,
-              latitude: res.latitude,
-              longitude: res.longitude,
-              title: '当前位置',
-              iconPath: '/static/location.png',
-              width: 30,
-              height: 30
-            }];
-            
-            // 强制刷新地图
-            const mapContext = uni.createMapContext('runMap');
-            if (mapContext) {
-              mapContext.moveToLocation({
+            if (this.mapContext) {
+              this.mapContext.moveToLocation({
                 latitude: res.latitude,
                 longitude: res.longitude,
                 success: () => {
-                  console.log('地图成功移动到当前位置');
+                  console.log('地图已经移动到定位点');
                 },
                 fail: (err) => {
                   console.error('地图移动失败', err);
@@ -220,7 +247,12 @@ export default {
             }
             
             uni.hideLoading();
-          }, 300); // 短暂延迟确保地图已渲染
+            
+            // 开始定期更新位置
+            if (!this.isRunning) {
+              this.startPositionUpdateTimer();
+            }
+          }, 500);
         },
         fail: (err) => {
           clearTimeout(locationTimeout);
@@ -259,9 +291,6 @@ export default {
     },
     
     moveToLocation() {
-      uni.showLoading({
-        title: '定位中...'
-      });
       
       uni.getLocation({
         type: 'gcj02',
@@ -320,25 +349,32 @@ export default {
     
     startRun() {
       this.isRunning = true;
+      
+      // 停止普通的位置更新定时器
+      this.clearPositionUpdateTimer();
+      
       this.startTime = new Date();
       this.duration = 0;
       this.distance = 0;
       this.calories = 0;
       this.locationList = [];
-      this.polyline = [];
       
       // 放大地图层级以查看更详细路径
-      this.scale = 20; // 设置为最大缩放级别
+      this.scale = 18;
+      if (this.mapContext) {
+        this.mapContext.setScale({
+          scale: 18
+        });
+      }
       
-      // 更新路径样式
+      // 初始化轨迹线
       this.polyline = [{
         points: [],
         color: '#FF6B6B',
-        width: 8, // 增加路径宽度
+        width: 8,
         arrowLine: true,
-        borderWidth: 1, // 添加边框
-        borderColor: '#FF8E53', // 边框颜色
-        level: 'abovelabels' // 确保路径显示在地图标签之上
+        borderWidth: 1,
+        borderColor: '#FF8E53'
       }];
       
       // 开始计时
@@ -376,8 +412,10 @@ export default {
       
       // 更新积分
       const userInfo = uni.getStorageSync('userInfo');
-      userInfo.points += 5; // 跑步奖励5积分
-      uni.setStorageSync('userInfo', userInfo);
+      if (userInfo) {
+        userInfo.points = (userInfo.points || 0) + 5; // 跑步奖励5积分
+        uni.setStorageSync('userInfo', userInfo);
+      }
       
       // 使用toast提示完成
       uni.showToast({
@@ -388,6 +426,14 @@ export default {
       
       // 恢复地图层级
       this.scale = 16;
+      if (this.mapContext) {
+        this.mapContext.setScale({
+          scale: 16
+        });
+      }
+      
+      // 重新开始普通的位置更新定时器
+      this.startPositionUpdateTimer();
     },
     
     startLocationTracking() {
@@ -465,6 +511,69 @@ export default {
     
     closeFinishPopup() {
       this.$refs.finishPopup.close();
+    },
+
+    onRegionChange(e) {
+      // Implementation of onRegionChange method
+    },
+
+    onMarkerTap(e) {
+      // Implementation of onMarkerTap method
+    },
+
+    // 开始位置更新定时器 - 非跑步状态下每5秒更新一次
+    startPositionUpdateTimer() {
+      // 先清除已有的定时器
+      this.clearPositionUpdateTimer();
+      
+      // 如果正在跑步状态，不启动此定时器
+      if (this.isRunning) {
+        return;
+      }
+      
+      this.positionUpdateTimer = setInterval(() => {
+        // 静默更新位置，不显示加载中
+        uni.getLocation({
+          type: 'gcj02',
+          isHighAccuracy: true,
+          success: (res) => {
+            console.log('定时位置更新:', res);
+            this.latitude = res.latitude;
+            this.longitude = res.longitude;
+            
+            // 保存当前位置状态
+            this.lastKnownPosition = {
+              latitude: res.latitude,
+              longitude: res.longitude,
+              timestamp: Date.now()
+            };
+            uni.setStorageSync('lastPosition', JSON.stringify(this.lastKnownPosition));
+            
+            // 更新标记点位置
+            this.markers[0].latitude = res.latitude;
+            this.markers[0].longitude = res.longitude;
+            
+            // 如果地图上下文存在，移动地图位置
+            if (this.mapContext) {
+              this.mapContext.moveToLocation({
+                latitude: res.latitude,
+                longitude: res.longitude
+              });
+            }
+          },
+          fail: (err) => {
+            console.error('定时位置更新失败', err);
+          }
+        });
+      }, 5000); // 每5秒执行一次
+    },
+    
+    // 清除位置更新定时器
+    clearPositionUpdateTimer() {
+      if (this.positionUpdateTimer) {
+        clearInterval(this.positionUpdateTimer);
+        this.positionUpdateTimer = null;
+      }
     }
   }
 }

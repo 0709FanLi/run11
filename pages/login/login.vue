@@ -15,13 +15,13 @@
       </view>
       
       <view class="form-item code-input">
-        <input type="number" v-model="code" maxlength="6" placeholder="验证码" />
-        <text class="code-btn" :class="{ 'counting': counting }" @click="getVerifyCode">
+        <input type="number" v-model="verificationCode" maxlength="6" placeholder="验证码" />
+        <text class="code-btn" :class="{ 'counting': counting }" @click="getVerificationCode">
           {{ counting ? `${countDown}秒后重发` : '获取验证码' }}
         </text>
       </view>
       
-      <button class="login-btn" @click="handleLogin">登录/注册</button>
+      <button class="login-btn" @click="login">登录/注册</button>
     </view>
   </view>
 </template>
@@ -31,7 +31,8 @@ export default {
   data() {
     return {
       phone: '18768880709', // 默认手机号
-      code: '',
+      verificationCode: '', // 用户输入的验证码
+      defaultCode: '888888', // 默认验证码
       counting: false,
       countDown: 60
     }
@@ -66,8 +67,9 @@ export default {
       });
     },
     
-    getVerifyCode() {
-      if (!/^1\d{10}$/.test(this.phone)) {
+    getVerificationCode() {
+      // 验证手机号
+      if (!this.phone || !/^1\d{10}$/.test(this.phone)) {
         uni.showToast({
           title: '请输入正确的手机号',
           icon: 'none'
@@ -75,24 +77,16 @@ export default {
         return;
       }
       
+      // 显示默认验证码（实际应用中应该通过短信发送）
+      uni.showToast({
+        title: '默认验证码：' + this.defaultCode,
+        icon: 'none',
+        duration: 3000
+      });
+      
+      // 开始倒计时逻辑...
       this.counting = true;
       this.countDown = 60;
-      
-      // 模拟发送验证码
-      // 随机模拟成功或失败
-      const isSuccess = Math.random() > 0.2; // 80%概率成功
-      
-      if (!isSuccess) {
-        uni.showToast({
-          title: '验证码发送失败，请重试',
-          icon: 'none'
-        });
-        this.counting = false;
-        return;
-      }
-      
-      // 成功情况下不显示提示
-      console.log('验证码发送成功');
       
       // 倒计时
       const timer = setInterval(() => {
@@ -104,8 +98,9 @@ export default {
       }, 1000);
     },
     
-    handleLogin() {
-      if (!/^1\d{10}$/.test(this.phone)) {
+    login() {
+      // 验证手机号
+      if (!this.phone || !/^1\d{10}$/.test(this.phone)) {
         uni.showToast({
           title: '请输入正确的手机号',
           icon: 'none'
@@ -113,54 +108,52 @@ export default {
         return;
       }
       
-      if (!this.code || this.code.length !== 6) {
+      // 验证验证码
+      if (!this.verificationCode) {
         uni.showToast({
-          title: '请输入6位验证码',
+          title: '请输入验证码',
           icon: 'none'
         });
         return;
       }
       
-      // 模拟登录/注册处理
+      // 检查验证码是否匹配默认验证码
+      if (this.verificationCode !== this.defaultCode) {
+        uni.showToast({
+          title: '验证码错误',
+          icon: 'none'
+        });
+        return;
+      }
+      
+      // 验证通过，执行登录逻辑
       uni.showLoading({
-        title: '处理中...'
+        title: '登录中...'
       });
       
-      // 模拟检查手机号是否注册过
+      // 模拟登录请求
       setTimeout(() => {
-        const isRegistered = Math.random() > 0.5; // 随机模拟是否已注册
-        
-        if (isRegistered) {
-          // 已注册，直接登录
-          uni.showToast({
-            title: '登录成功',
-            icon: 'success'
-          });
-        } else {
-          // 未注册，自动注册
-          uni.showToast({
-            title: '注册成功',
-            icon: 'success'
-          });
-        }
-        
-        // 保存登录状态
+        // 存储登录状态
         uni.setStorageSync('isLoggedIn', true);
-        uni.setStorageSync('userInfo', {
-          phone: this.phone,
-          points: 100, // 初始积分
-          avatarUrl: '/static/default-avatar.png',
-          nickname: '跑步达人',
-          gender: '男'
-        });
         
-        // 延迟跳转到首页
-        setTimeout(() => {
-          uni.hideLoading();
-          uni.reLaunch({
-            url: '/pages/index/index'
-          });
-        }, 1000);
+        // 创建用户信息（实际应用中应该从后端获取）
+        const userInfo = {
+          id: '1001',
+          name: '用户' + this.phone.substring(7),
+          phone: this.phone,
+          avatar: '/static/avatar.png',
+          points: 0
+        };
+        
+        // 存储用户信息
+        uni.setStorageSync('userInfo', userInfo);
+        
+        uni.hideLoading();
+        
+        // 登录成功，跳转到首页
+        uni.switchTab({
+          url: '/pages/index/index'
+        });
       }, 1500);
     }
   }

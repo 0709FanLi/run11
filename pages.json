@@ -23,7 +23,8 @@
 		{
 			"path": "pages/points/points",
 			"style": {
-				"navigationBarTitleText": "我的积分"
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom"
 			}
 		},
 		{

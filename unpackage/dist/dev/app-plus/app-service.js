@@ -51,7 +51,10 @@ if (uni.restoreGlobal) {
       return {
         phone: "18768880709",
         // 默认手机号
-        code: "",
+        verificationCode: "",
+        // 用户输入的验证码
+        defaultCode: "888888",
+        // 默认验证码
         counting: false,
         countDown: 60
       };
@@ -64,43 +67,38 @@ if (uni.restoreGlobal) {
         uni.getImageInfo({
           src: "/static/login-bg.png",
           success: (res) => {
-            formatAppLog("log", "at pages/login/login.vue:49", "背景图加载成功", res);
+            formatAppLog("log", "at pages/login/login.vue:50", "背景图加载成功", res);
           },
           fail: (err) => {
-            formatAppLog("error", "at pages/login/login.vue:52", "背景图加载失败", err);
+            formatAppLog("error", "at pages/login/login.vue:53", "背景图加载失败", err);
             uni.getImageInfo({
               src: "static/login-bg.png",
               success: (res) => {
-                formatAppLog("log", "at pages/login/login.vue:57", "使用alternate路径加载成功");
+                formatAppLog("log", "at pages/login/login.vue:58", "使用alternate路径加载成功");
                 document.querySelector(".page-bg").src = "static/login-bg.png";
               },
               fail: (errInner) => {
-                formatAppLog("error", "at pages/login/login.vue:62", "所有路径都加载失败", errInner);
+                formatAppLog("error", "at pages/login/login.vue:63", "所有路径都加载失败", errInner);
               }
             });
           }
         });
       },
-      getVerifyCode() {
-        if (!/^1\d{10}$/.test(this.phone)) {
+      getVerificationCode() {
+        if (!this.phone || !/^1\d{10}$/.test(this.phone)) {
           uni.showToast({
             title: "请输入正确的手机号",
             icon: "none"
           });
           return;
         }
+        uni.showToast({
+          title: "默认验证码：" + this.defaultCode,
+          icon: "none",
+          duration: 3e3
+        });
         this.counting = true;
         this.countDown = 60;
-        const isSuccess = Math.random() > 0.2;
-        if (!isSuccess) {
-          uni.showToast({
-            title: "验证码发送失败，请重试",
-            icon: "none"
-          });
-          this.counting = false;
-          return;
-        }
-        formatAppLog("log", "at pages/login/login.vue:95", "验证码发送成功");
         const timer = setInterval(() => {
           this.countDown--;
           if (this.countDown <= 0) {
@@ -109,52 +107,45 @@ if (uni.restoreGlobal) {
           }
         }, 1e3);
       },
-      handleLogin() {
-        if (!/^1\d{10}$/.test(this.phone)) {
+      login() {
+        if (!this.phone || !/^1\d{10}$/.test(this.phone)) {
           uni.showToast({
             title: "请输入正确的手机号",
             icon: "none"
           });
           return;
         }
-        if (!this.code || this.code.length !== 6) {
+        if (!this.verificationCode) {
           uni.showToast({
-            title: "请输入6位验证码",
+            title: "请输入验证码",
+            icon: "none"
+          });
+          return;
+        }
+        if (this.verificationCode !== this.defaultCode) {
+          uni.showToast({
+            title: "验证码错误",
             icon: "none"
           });
           return;
         }
         uni.showLoading({
-          title: "处理中..."
+          title: "登录中..."
         });
         setTimeout(() => {
-          const isRegistered = Math.random() > 0.5;
-          if (isRegistered) {
-            uni.showToast({
-              title: "登录成功",
-              icon: "success"
-            });
-          } else {
-            uni.showToast({
-              title: "注册成功",
-              icon: "success"
-            });
-          }
           uni.setStorageSync("isLoggedIn", true);
-          uni.setStorageSync("userInfo", {
+          const userInfo = {
+            id: "1001",
+            name: "用户" + this.phone.substring(7),
             phone: this.phone,
-            points: 100,
-            // 初始积分
-            avatarUrl: "/static/default-avatar.png",
-            nickname: "跑步达人",
-            gender: "男"
+            avatar: "/static/avatar.png",
+            points: 0
+          };
+          uni.setStorageSync("userInfo", userInfo);
+          uni.hideLoading();
+          uni.switchTab({
+            url: "/pages/index/index"
           });
-          setTimeout(() => {
-            uni.hideLoading();
-            uni.reLaunch({
-              url: "/pages/index/index"
-            });
-          }, 1e3);
         }, 1500);
       }
     }
@@ -194,7 +185,7 @@ if (uni.restoreGlobal) {
             "input",
             {
               type: "number",
-              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => $data.code = $event),
+              "onUpdate:modelValue": _cache[1] || (_cache[1] = ($event) => $data.verificationCode = $event),
               maxlength: "6",
               placeholder: "验证码"
             },
@@ -202,13 +193,13 @@ if (uni.restoreGlobal) {
             512
             /* NEED_PATCH */
           ), [
-            [vue.vModelText, $data.code]
+            [vue.vModelText, $data.verificationCode]
           ]),
           vue.createElementVNode(
             "text",
             {
               class: vue.normalizeClass(["code-btn", { "counting": $data.counting }]),
-              onClick: _cache[2] || (_cache[2] = (...args) => $options.getVerifyCode && $options.getVerifyCode(...args))
+              onClick: _cache[2] || (_cache[2] = (...args) => $options.getVerificationCode && $options.getVerificationCode(...args))
             },
             vue.toDisplayString($data.counting ? `${$data.countDown}秒后重发` : "获取验证码"),
             3
@@ -217,7 +208,7 @@ if (uni.restoreGlobal) {
         ]),
         vue.createElementVNode("button", {
           class: "login-btn",
-          onClick: _cache[3] || (_cache[3] = (...args) => $options.handleLogin && $options.handleLogin(...args))
+          onClick: _cache[3] || (_cache[3] = (...args) => $options.login && $options.login(...args))
         }, "登录/注册")
       ])
     ]);
@@ -262,8 +253,15 @@ if (uni.restoreGlobal) {
         // 位置记录
         pace: `0'00"`,
         // 配速
-        customMapStyle: "amap://styles/fresh"
+        customMapStyle: "amap://styles/fresh",
         // 使用自定义地图样式
+        includePoints: [],
+        positionUpdateTimer: null,
+        // 保存位置更新定时器
+        lastKnownPosition: null,
+        // 上次知道的位置
+        mapContext: null
+        // 地图上下文
       };
     },
     computed: {
@@ -282,10 +280,25 @@ if (uni.restoreGlobal) {
         });
         return;
       }
+      const lastPositionData = uni.getStorageSync("lastPosition");
+      if (lastPositionData) {
+        this.lastKnownPosition = JSON.parse(lastPositionData);
+        this.latitude = this.lastKnownPosition.latitude;
+        this.longitude = this.lastKnownPosition.longitude;
+        this.markers = [{
+          id: 1,
+          latitude: this.latitude,
+          longitude: this.longitude,
+          title: "当前位置",
+          iconPath: "/static/location.png",
+          width: 30,
+          height: 30
+        }];
+      }
       try {
         uni.hideNavigationBar();
       } catch (e) {
-        formatAppLog("log", "at pages/index/index.vue:123", "隐藏导航栏失败", e);
+        formatAppLog("log", "at pages/index/index.vue:136", "隐藏导航栏失败", e);
       }
       this.adjustPageLayout();
       setTimeout(() => {
@@ -296,15 +309,22 @@ if (uni.restoreGlobal) {
       setTimeout(() => {
         uni.hideNavigationBar();
       }, 300);
+      if (!this.isRunning) {
+        this.startPositionUpdateTimer();
+      }
+    },
+    onHide() {
+      this.clearPositionUpdateTimer();
     },
     onUnload() {
       this.clearListeners();
+      this.clearPositionUpdateTimer();
     },
     methods: {
       adjustPageLayout() {
         uni.getSystemInfo({
           success: (res) => {
-            formatAppLog("log", "at pages/index/index.vue:149", "系统信息:", res);
+            formatAppLog("log", "at pages/index/index.vue:172", "系统信息:", res);
             let safeBottom = 70;
             if (res.safeAreaInsets && res.safeAreaInsets.bottom > 0) {
               safeBottom = res.safeAreaInsets.bottom + 60;
@@ -330,46 +350,50 @@ if (uni.restoreGlobal) {
         }, 8e3);
         uni.getLocation({
           type: "gcj02",
-          altitude: true,
-          // 获取高度信息增加精度
           isHighAccuracy: true,
           // 开启高精度定位
-          highAccuracyExpireTime: 4e3,
-          // 高精度定位超时时间 (ms)
           success: (res) => {
             clearTimeout(locationTimeout);
-            formatAppLog("log", "at pages/index/index.vue:190", "定位成功:", res);
+            formatAppLog("log", "at pages/index/index.vue:211", "定位成功:", res);
             this.latitude = res.latitude;
             this.longitude = res.longitude;
+            this.lastKnownPosition = {
+              latitude: res.latitude,
+              longitude: res.longitude,
+              timestamp: Date.now()
+            };
+            uni.setStorageSync("lastPosition", JSON.stringify(this.lastKnownPosition));
+            this.markers = [{
+              id: 1,
+              latitude: res.latitude,
+              longitude: res.longitude,
+              title: "当前位置",
+              iconPath: "/static/location.png",
+              width: 30,
+              height: 30
+            }];
             setTimeout(() => {
-              this.markers = [{
-                id: 1,
-                latitude: res.latitude,
-                longitude: res.longitude,
-                title: "当前位置",
-                iconPath: "/static/location.png",
-                width: 30,
-                height: 30
-              }];
-              const mapContext = uni.createMapContext("runMap");
-              if (mapContext) {
-                mapContext.moveToLocation({
+              if (this.mapContext) {
+                this.mapContext.moveToLocation({
                   latitude: res.latitude,
                   longitude: res.longitude,
                   success: () => {
-                    formatAppLog("log", "at pages/index/index.vue:214", "地图成功移动到当前位置");
+                    formatAppLog("log", "at pages/index/index.vue:241", "地图已经移动到定位点");
                   },
                   fail: (err) => {
-                    formatAppLog("error", "at pages/index/index.vue:217", "地图移动失败", err);
+                    formatAppLog("error", "at pages/index/index.vue:244", "地图移动失败", err);
                   }
                 });
               }
               uni.hideLoading();
-            }, 300);
+              if (!this.isRunning) {
+                this.startPositionUpdateTimer();
+              }
+            }, 500);
           },
           fail: (err) => {
             clearTimeout(locationTimeout);
-            formatAppLog("error", "at pages/index/index.vue:227", "获取位置失败", err);
+            formatAppLog("error", "at pages/index/index.vue:259", "获取位置失败", err);
             uni.hideLoading();
             uni.showToast({
               title: "获取位置失败，请检查定位权限",
@@ -391,7 +415,7 @@ if (uni.restoreGlobal) {
             }
           },
           fail: (err) => {
-            formatAppLog("error", "at pages/index/index.vue:252", "获取位置失败", err);
+            formatAppLog("error", "at pages/index/index.vue:284", "获取位置失败", err);
             uni.showToast({
               title: "获取位置失败，请检查定位权限",
               icon: "none"
@@ -400,9 +424,6 @@ if (uni.restoreGlobal) {
         });
       },
       moveToLocation() {
-        uni.showLoading({
-          title: "定位中..."
-        });
         uni.getLocation({
           type: "gcj02",
           isHighAccuracy: true,
@@ -433,7 +454,7 @@ if (uni.restoreGlobal) {
             });
           },
           fail: (err) => {
-            formatAppLog("error", "at pages/index/index.vue:301", "获取位置失败", err);
+            formatAppLog("error", "at pages/index/index.vue:330", "获取位置失败", err);
             uni.hideLoading();
             uni.showToast({
               title: "获取位置失败，请检查定位权限",
@@ -451,25 +472,25 @@ if (uni.restoreGlobal) {
       },
       startRun() {
         this.isRunning = true;
+        this.clearPositionUpdateTimer();
         this.startTime = /* @__PURE__ */ new Date();
         this.duration = 0;
         this.distance = 0;
         this.calories = 0;
         this.locationList = [];
-        this.polyline = [];
-        this.scale = 20;
+        this.scale = 18;
+        if (this.mapContext) {
+          this.mapContext.setScale({
+            scale: 18
+          });
+        }
         this.polyline = [{
           points: [],
           color: "#FF6B6B",
           width: 8,
-          // 增加路径宽度
           arrowLine: true,
           borderWidth: 1,
-          // 添加边框
-          borderColor: "#FF8E53",
-          // 边框颜色
-          level: "abovelabels"
-          // 确保路径显示在地图标签之上
+          borderColor: "#FF8E53"
         }];
         this.timer = setInterval(() => {
           this.duration++;
@@ -492,19 +513,27 @@ if (uni.restoreGlobal) {
         this.timer = null;
         this.clearListeners();
         const userInfo = uni.getStorageSync("userInfo");
-        userInfo.points += 5;
-        uni.setStorageSync("userInfo", userInfo);
+        if (userInfo) {
+          userInfo.points = (userInfo.points || 0) + 5;
+          uni.setStorageSync("userInfo", userInfo);
+        }
         uni.showToast({
           title: "跑步结束，获得5积分",
           icon: "success",
           duration: 2e3
         });
         this.scale = 16;
+        if (this.mapContext) {
+          this.mapContext.setScale({
+            scale: 16
+          });
+        }
+        this.startPositionUpdateTimer();
       },
       startLocationTracking() {
         uni.startLocationUpdate({
           success: (res) => {
-            formatAppLog("log", "at pages/index/index.vue:396", "开始监听位置变化");
+            formatAppLog("log", "at pages/index/index.vue:442", "开始监听位置变化");
             this.locationChangeListener = (res2) => {
               const { latitude, longitude } = res2;
               this.locationList.push({ latitude, longitude });
@@ -530,7 +559,7 @@ if (uni.restoreGlobal) {
             uni.onLocationChange(this.locationChangeListener);
           },
           fail: (err) => {
-            formatAppLog("error", "at pages/index/index.vue:430", "开始监听位置失败", err);
+            formatAppLog("error", "at pages/index/index.vue:476", "开始监听位置失败", err);
           }
         });
       },
@@ -559,6 +588,52 @@ if (uni.restoreGlobal) {
       },
       closeFinishPopup() {
         this.$refs.finishPopup.close();
+      },
+      onRegionChange(e) {
+      },
+      onMarkerTap(e) {
+      },
+      // 开始位置更新定时器 - 非跑步状态下每5秒更新一次
+      startPositionUpdateTimer() {
+        this.clearPositionUpdateTimer();
+        if (this.isRunning) {
+          return;
+        }
+        this.positionUpdateTimer = setInterval(() => {
+          uni.getLocation({
+            type: "gcj02",
+            isHighAccuracy: true,
+            success: (res) => {
+              formatAppLog("log", "at pages/index/index.vue:540", "定时位置更新:", res);
+              this.latitude = res.latitude;
+              this.longitude = res.longitude;
+              this.lastKnownPosition = {
+                latitude: res.latitude,
+                longitude: res.longitude,
+                timestamp: Date.now()
+              };
+              uni.setStorageSync("lastPosition", JSON.stringify(this.lastKnownPosition));
+              this.markers[0].latitude = res.latitude;
+              this.markers[0].longitude = res.longitude;
+              if (this.mapContext) {
+                this.mapContext.moveToLocation({
+                  latitude: res.latitude,
+                  longitude: res.longitude
+                });
+              }
+            },
+            fail: (err) => {
+              formatAppLog("error", "at pages/index/index.vue:565", "定时位置更新失败", err);
+            }
+          });
+        }, 5e3);
+      },
+      // 清除位置更新定时器
+      clearPositionUpdateTimer() {
+        if (this.positionUpdateTimer) {
+          clearInterval(this.positionUpdateTimer);
+          this.positionUpdateTimer = null;
+        }
       }
     }
   };
@@ -568,6 +643,7 @@ if (uni.restoreGlobal) {
       vue.createElementVNode("view", { class: "map-section" }, [
         vue.createElementVNode("map", {
           id: "runMap",
+          provider: "qqmap",
           latitude: $data.latitude,
           longitude: $data.longitude,
           markers: $data.markers,
@@ -581,19 +657,9 @@ if (uni.restoreGlobal) {
           "show-scale": false,
           "enable-zoom": true,
           "enable-rotate": true,
-          "min-scale": 3,
-          "max-scale": 20,
-          "custom-map-style": $data.customMapStyle,
-          setting: {
-            skew: 0,
-            rotate: 0,
-            showScale: false,
-            showCompass: true,
-            enableRotate: true,
-            enableOverlooking: false,
-            enableSatellite: false,
-            enableTraffic: false
-          }
+          "include-points": $data.includePoints,
+          onRegionchange: _cache[1] || (_cache[1] = (...args) => $options.onRegionChange && $options.onRegionChange(...args)),
+          onMarkertap: _cache[2] || (_cache[2] = (...args) => $options.onMarkerTap && $options.onMarkerTap(...args))
         }, [
           vue.createCommentVNode(" 地图控件 "),
           vue.createElementVNode("cover-view", { class: "map-controls" }, [
@@ -607,7 +673,7 @@ if (uni.restoreGlobal) {
               })
             ])
           ])
-        ], 8, ["latitude", "longitude", "markers", "polyline", "scale", "custom-map-style"])
+        ], 40, ["latitude", "longitude", "markers", "polyline", "scale", "include-points"])
       ]),
       vue.createCommentVNode(" 跑步信息和按钮 "),
       vue.createElementVNode(
@@ -661,7 +727,7 @@ if (uni.restoreGlobal) {
                 "button",
                 {
                   class: vue.normalizeClass(["run-button", { "small": $data.isRunning }]),
-                  onClick: _cache[1] || (_cache[1] = (...args) => $options.toggleRun && $options.toggleRun(...args))
+                  onClick: _cache[3] || (_cache[3] = (...args) => $options.toggleRun && $options.toggleRun(...args))
                 },
                 vue.toDisplayString($data.isRunning ? "结束跑步" : "开始跑步"),
                 3
@@ -913,7 +979,15 @@ if (uni.restoreGlobal) {
           }
         ],
         selectedProduct: null,
-        selectedAddress: null
+        selectedAddress: null,
+        showAddressDialog: false,
+        showSuccessDialog: false,
+        selectedPrize: null,
+        address: {
+          name: "",
+          phone: "",
+          detail: ""
+        }
       };
     },
     onLoad() {
@@ -933,7 +1007,7 @@ if (uni.restoreGlobal) {
         }
         this.selectedProduct = product;
         this.selectedAddress = null;
-        this.$refs.addressPopup.open();
+        this.showAddressDialog = true;
       },
       closeAddressPopup() {
         this.$refs.addressPopup.close();
@@ -965,11 +1039,18 @@ if (uni.restoreGlobal) {
           uni.setStorageSync("userInfo", userInfo);
           this.userInfo = userInfo;
           uni.hideLoading();
-          this.$refs.successPopup.open();
+          this.showSuccessDialog = true;
         }, 1500);
       },
       closeSuccessPopup() {
         this.$refs.successPopup.close();
+      },
+      closeAddressDialog() {
+        this.showAddressDialog = false;
+      },
+      closeAllDialogs() {
+        this.showAddressDialog = false;
+        this.showSuccessDialog = false;
       }
     }
   };
@@ -1035,9 +1116,10 @@ if (uni.restoreGlobal) {
         ])
       ]),
       vue.createCommentVNode(" 地址选择弹窗 "),
-      vue.createVNode(
+      $data.showAddressDialog ? (vue.openBlock(), vue.createBlock(
         _component_uni_popup,
         {
+          key: 0,
           ref: "addressPopup",
           type: "bottom"
         },
@@ -1119,11 +1201,12 @@ if (uni.restoreGlobal) {
         },
         512
         /* NEED_PATCH */
-      ),
+      )) : vue.createCommentVNode("v-if", true),
       vue.createCommentVNode(" 兑换成功弹窗 "),
-      vue.createVNode(
+      $data.showSuccessDialog ? (vue.openBlock(), vue.createBlock(
         _component_uni_popup,
         {
+          key: 1,
           ref: "successPopup",
           type: "center"
         },
@@ -1147,7 +1230,13 @@ if (uni.restoreGlobal) {
         },
         512
         /* NEED_PATCH */
-      )
+      )) : vue.createCommentVNode("v-if", true),
+      vue.createCommentVNode(" 如果使用遮罩层，也需要添加条件控制 "),
+      $data.showAddressDialog || $data.showSuccessDialog ? (vue.openBlock(), vue.createElementBlock("view", {
+        key: 2,
+        class: "mask",
+        onClick: _cache[4] || (_cache[4] = (...args) => $options.closeAllDialogs && $options.closeAllDialogs(...args))
+      })) : vue.createCommentVNode("v-if", true)
     ]);
   }
   const PagesPointsPoints = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["render", _sfc_render$2], ["__file", "/Users/Macx/Desktop/ai项目/run11/pages/points/points.vue"]]);

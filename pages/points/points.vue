@@ -33,7 +33,7 @@
     </view>
     
     <!-- 地址选择弹窗 -->
-    <uni-popup ref="addressPopup" type="bottom">
+    <uni-popup ref="addressPopup" type="bottom" v-if="showAddressDialog">
       <view class="address-popup">
         <view class="popup-header">
           <text class="popup-title">选择收货地址</text>
@@ -69,7 +69,7 @@
     </uni-popup>
     
     <!-- 兑换成功弹窗 -->
-    <uni-popup ref="successPopup" type="center">
+    <uni-popup ref="successPopup" type="center" v-if="showSuccessDialog">
       <view class="success-popup">
         <image src="/static/success.png" class="success-icon"></image>
         <text class="success-title">兑换成功</text>
@@ -77,6 +77,9 @@
         <button class="success-btn" @click="closeSuccessPopup">确定</button>
       </view>
     </uni-popup>
+    
+    <!-- 如果使用遮罩层，也需要添加条件控制 -->
+    <view class="mask" v-if="showAddressDialog || showSuccessDialog" @click="closeAllDialogs"></view>
   </view>
 </template>
 
@@ -146,7 +149,15 @@ export default {
         }
       ],
       selectedProduct: null,
-      selectedAddress: null
+      selectedAddress: null,
+      showAddressDialog: false,
+      showSuccessDialog: false,
+      selectedPrize: null,
+      address: {
+        name: '',
+        phone: '',
+        detail: ''
+      }
     }
   },
   onLoad() {
@@ -168,7 +179,7 @@ export default {
       
       this.selectedProduct = product;
       this.selectedAddress = null; // 重置选择的地址
-      this.$refs.addressPopup.open();
+      this.showAddressDialog = true;
     },
     
     closeAddressPopup() {
@@ -216,12 +227,21 @@ export default {
         uni.hideLoading();
         
         // 显示成功弹窗
-        this.$refs.successPopup.open();
+        this.showSuccessDialog = true;
       }, 1500);
     },
     
     closeSuccessPopup() {
       this.$refs.successPopup.close();
+    },
+    
+    closeAddressDialog() {
+      this.showAddressDialog = false;
+    },
+    
+    closeAllDialogs() {
+      this.showAddressDialog = false;
+      this.showSuccessDialog = false;
     }
   }
 }
@@ -476,5 +496,15 @@ export default {
   background-color: #FF6B6B;
   color: #fff;
   border-radius: 20px;
+}
+
+.mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 </style> 
